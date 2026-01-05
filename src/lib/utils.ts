@@ -19,6 +19,47 @@ const statusSymbols = {
 };
 
 /**
+ * Estimates the dimensions of a node based on its task content.
+ * Takes into account summary length and number of tags.
+ */
+export function estimateNodeDimensions(
+  task: Task,
+  showTags: boolean = true
+): { width: number; height: number } {
+  // Base dimensions
+  const baseWidth = NODEWIDTH; // 250px
+  const baseHeight = 60; // Minimum height for header (status, priority, buttons)
+
+  // Estimate height based on summary length
+  // Node inner width is ~226px (250 - 24px padding), average char width ~7px = ~32 chars per line
+  // But with icons and buttons taking space, effective is lower
+  const charsPerLine = 24;
+  const lineHeight = 22; // Slightly more than font size for line spacing
+  const summaryLines = Math.ceil(task.summary.length / charsPerLine);
+  const summaryHeight = Math.max(1, summaryLines) * lineHeight;
+
+  // Estimate height for tags (each row of tags is ~28px, ~3 tags per row)
+  let tagsHeight = 0;
+  if (showTags && task.tags.length > 0) {
+    const tagsPerRow = 3;
+    const tagRows = Math.ceil((task.tags.length + 1) / tagsPerRow); // +1 for "Add tag" button
+    tagsHeight = tagRows * 28;
+  }
+
+  // Add padding and safety margin
+  const padding = 24; // 12px top + 12px bottom
+  const safetyMargin = 16; // Extra buffer to prevent overlap
+
+  const totalHeight =
+    baseHeight + summaryHeight + tagsHeight + padding + safetyMargin;
+
+  return {
+    width: baseWidth,
+    height: Math.max(NODEHEIGHT, totalHeight),
+  };
+}
+
+/**
  * Find the index of a task line in an array of lines by its ID.
  * Supports both emoji format (🆔 abc123) and Dataview format ([[id:: abc123]])
  */
@@ -118,6 +159,32 @@ export async function updateTaskStatusInVault(
       /\[([ x/\-])\]/, // eslint-disable-line no-useless-escape
       statusSymbols[newStatus]
     );
+    return lines.join("\n");
+  });
+}
+
+export async function deleteTaskFromVault(task: Task, app: App): Promise<void> {
+  if (!task.link) return;
+  const vault = app?.vault;
+  if (!vault) return;
+  const file = vault.getFileByPath(task.link);
+  if (!file) return;
+
+  // Handle note-based tasks (delete the entire file)
+  if (task.type === "note") {
+    await vault.delete(file);
+    return;
+  }
+
+  // Handle dataview tasks (remove the task line)
+  await vault.process(file, (fileContent) => {
+    const lines = fileContent.split(/\r?\n/);
+    const taskLineIdx = findTaskLineByIdOrText(lines, task.id, task.text);
+
+    if (taskLineIdx === -1) return fileContent;
+
+    // Remove the task line
+    lines.splice(taskLineIdx, 1);
     return lines.join("\n");
   });
 }
@@ -487,15 +554,26 @@ export async function addTagToTaskInVault(
 export function getLayoutedElements(
   nodes: Node[],
   edges: Edge[],
-  direction: "Horizontal" | "Vertical" = "Horizontal"
+  direction: "Horizontal" | "Vertical" = "Horizontal",
+  showTags: boolean = true
 ) {
   const dagreGraph = new dagre.graphlib.Graph();
   dagreGraph.setDefaultEdgeLabel(() => ({}));
   const rankdir = direction === "Horizontal" ? "LR" : "TB"; // LR = Left-to-Right, TB = Top-to-Bottom
-  dagreGraph.setGraph({ rankdir });
+  dagreGraph.setGraph({ rankdir, nodesep: 30, ranksep: 50 });
+
+  // Store calculated dimensions for each node
+  const nodeDimensions = new Map<string, { width: number; height: number }>();
 
   nodes.forEach((node) => {
-    dagreGraph.setNode(node.id, { width: NODEWIDTH, height: NODEHEIGHT });
+    // Get task from node data to estimate dimensions
+    const task = node.data?.task as Task | undefined;
+    const dimensions = task
+      ? estimateNodeDimensions(task, showTags)
+      : { width: NODEWIDTH, height: NODEHEIGHT };
+
+    nodeDimensions.set(node.id, dimensions);
+    dagreGraph.setNode(node.id, dimensions);
   });
   edges.forEach((edge) => {
     dagreGraph.setEdge(edge.source, edge.target);
@@ -504,6 +582,11 @@ export function getLayoutedElements(
 
   return nodes.map((node) => {
     const nodeWithPosition = dagreGraph.node(node.id);
+    const dimensions = nodeDimensions.get(node.id) || {
+      width: NODEWIDTH,
+      height: NODEHEIGHT,
+    };
+
     if (!nodeWithPosition) {
       return {
         ...node,
@@ -513,8 +596,9 @@ export function getLayoutedElements(
       return {
         ...node,
         position: {
-          x: nodeWithPosition.x - 90, // center horizontally
-          y: nodeWithPosition.y - 30, // center vertically
+          // Center the node at the position dagre calculated
+          x: nodeWithPosition.x - dimensions.width / 2,
+          y: nodeWithPosition.y - dimensions.height / 2,
         },
       };
     }
@@ -1195,7 +1279,9 @@ export function createNodesFromTasks(
   debugVisualization: boolean = false,
   tagColorMode: "random" | "static" = "random",
   tagColorSeed: number = 42,
-  tagStaticColor: string = "#3b82f6"
+  tagStaticColor: string = "#3b82f6",
+  // eslint-disable-next-line no-unused-vars
+  onDeleteTask?: (taskId: string) => void
 ): TaskNode[] {
   const isVertical = layoutDirection === "Vertical";
   const sourcePosition = isVertical ? Position.Bottom : Position.Right;
@@ -1213,6 +1299,7 @@ export function createNodesFromTasks(
       tagColorMode,
       tagColorSeed,
       tagStaticColor,
+      onDeleteTask,
     },
     type: "task" as const,
     sourcePosition,

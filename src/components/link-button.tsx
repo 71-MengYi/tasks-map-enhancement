@@ -14,13 +14,21 @@ interface LinkButtonProps {
 
 const highlighter = new LineHighlighter();
 
-// Detect the file is opened.
+// Detect if the file is already opened in a leaf.
+// Checks both loaded views and deferred/unactivated tabs.
 function findLeafWithFile(app: App, filePath: string): WorkspaceLeaf | null {
   const leaves = app.workspace.getLeavesOfType("markdown");
 
   for (const leaf of leaves) {
+    // Check loaded view first
     const fileView = leaf.view as FileView;
     if (fileView?.file && fileView.file.path === filePath) {
+      return leaf;
+    }
+
+    // Check deferred/unactivated tabs via view state
+    const state = leaf.getViewState();
+    if (state?.state?.file === filePath) {
       return leaf;
     }
   }
@@ -57,14 +65,12 @@ export const LinkButton = ({
     let targetLeaf: WorkspaceLeaf;
 
     if (existingLeaf) {
-      // Switch to the tab
       await app.workspace.revealLeaf(existingLeaf);
       app.workspace.setActiveLeaf(existingLeaf, { focus: true });
       targetLeaf = existingLeaf;
     } else {
-      // Open in new tab
+      await app.workspace.openLinkText(link, link);
       targetLeaf = app.workspace.getLeaf("tab");
-      await targetLeaf.openFile(abstractFile);
     }
 
     // Wait for the view to be fully loaded

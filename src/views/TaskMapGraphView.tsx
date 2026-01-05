@@ -32,50 +32,56 @@ const ALL_STATUSES: TaskStatus[] = ["todo", "in_progress", "done", "canceled"];
 
 interface TaskMapGraphViewProps {
   settings: TasksMapSettings;
+  selectedTags: string[];
+  setSelectedTags: React.Dispatch<React.SetStateAction<string[]>>;
+  selectedStatuses: TaskStatus[];
+  setSelectedStatuses: React.Dispatch<React.SetStateAction<TaskStatus[]>>;
 }
 
-export default function TaskMapGraphView({ settings }: TaskMapGraphViewProps) {
+// Helper function to filter tasks
+const getFilteredNodeIds = (
+  tasks: Task[],
+  selectedTags: string[],
+  selectedStatuses: TaskStatus[]
+) => {
+  let filtered = tasks;
+  if (selectedTags.length > 0) {
+    filtered = filtered.filter((task) => {
+      const noTagsSelected = selectedTags.includes(NO_TAGS_VALUE);
+      const regularTagsSelected = selectedTags.filter(
+        (tag) => tag !== NO_TAGS_VALUE
+      );
+      const matchesNoTags = noTagsSelected && task.tags.length === 0;
+      const matchesRegularTags =
+        regularTagsSelected.length > 0 &&
+        regularTagsSelected.some((tag) => task.tags.includes(tag));
+      return matchesNoTags || matchesRegularTags;
+    });
+  }
+  if (selectedStatuses.length > 0) {
+    filtered = filtered.filter((task) =>
+      selectedStatuses.includes(task.status)
+    );
+  }
+  return filtered.map((task) => task.id);
+};
+
+export default function TaskMapGraphView({
+  settings,
+  selectedTags,
+  setSelectedTags,
+  selectedStatuses,
+  setSelectedStatuses,
+}: TaskMapGraphViewProps) {
   const app = useApp();
   const vault = app.vault;
   const [nodes, setNodes, onNodesChange] = useNodesState([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState([]);
   const [tasks, setTasks] = React.useState<Task[]>([]);
-  const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
   const [selectedEdge, setSelectedEdge] = React.useState<string | null>(null);
-  const [selectedStatuses, setSelectedStatuses] = React.useState<TaskStatus[]>([
-    ...ALL_STATUSES,
-  ]);
-  const selectedEdgeRef = React.useRef<string | null>(null);
-  const edgesRef = React.useRef(edges);
-  const tasksRef = React.useRef(tasks);
-  const vaultRef = React.useRef(vault);
+  const [isLoading, setIsLoading] = React.useState(true);
   const reactFlowInstance = useReactFlow();
-
-  useEffect(() => {
-    selectedEdgeRef.current = selectedEdge;
-  }, [selectedEdge]);
-
-  useEffect(() => {
-    edgesRef.current = edges;
-  }, [edges]);
-
-  useEffect(() => {
-    tasksRef.current = tasks;
-  }, [tasks]);
-
-  useEffect(() => {
-    vaultRef.current = vault;
-  }, [vault]);
-
-  useEffect(() => {
-    // Wait for a short moment to ensure vault is ready
-    // Tasks may not be immediately available on vault open through the Dataview plugin
-    const timeoutId = window.setTimeout(() => {
-      reloadTasks();
-    }, 1000);
-
-    return () => window.clearTimeout(timeoutId);
-  }, []);
+  const skipFitViewRef = React.useRef(false);
 
   // Maintain a live registry of tags per task for efficient allTags computation
   const [taskTagsRegistry, setTaskTagsRegistry] = React.useState<
@@ -89,7 +95,6 @@ export default function TaskMapGraphView({ settings }: TaskMapGraphViewProps) {
         tagFrequency.set(tag, (tagFrequency.get(tag) || 0) + 1);
       });
     });
-    // Sort by frequency (descending), then alphabetically
     return Array.from(tagFrequency.keys()).sort((a, b) => {
       const freqDiff = (tagFrequency.get(b) || 0) - (tagFrequency.get(a) || 0);
       if (freqDiff !== 0) return freqDiff;
@@ -97,51 +102,21 @@ export default function TaskMapGraphView({ settings }: TaskMapGraphViewProps) {
     });
   }, [taskTagsRegistry]);
 
-  const getFilteredNodeIds = (
-    tasks: Task[],
-    selectedTags: string[],
-    selectedStatuses: TaskStatus[]
-  ) => {
-    let filtered = tasks;
-    if (selectedTags.length > 0) {
-      filtered = filtered.filter((task) => {
-        // Check if "No tags" is selected
-        const noTagsSelected = selectedTags.includes(NO_TAGS_VALUE);
-        // Check if regular tags are selected
-        const regularTagsSelected = selectedTags.filter(
-          (tag) => tag !== NO_TAGS_VALUE
-        );
-
-        // If "No tags" is selected and task has no tags
-        const matchesNoTags = noTagsSelected && task.tags.length === 0;
-
-        // If regular tags are selected and task has matching tags
-        const matchesRegularTags =
-          regularTagsSelected.length > 0 &&
-          regularTagsSelected.some((tag) => task.tags.includes(tag));
-
-        // Return true if either condition is met
-        return matchesNoTags || matchesRegularTags;
+  const reloadTasks = useCallback(() => {
+    setIsLoading(true);
+    // Use setTimeout to allow the loading UI to render before heavy computation
+    setTimeout(() => {
+      const newTasks = getAllTasks(app);
+      setTasks(newTasks);
+      const newRegistry = new Map<string, string[]>();
+      newTasks.forEach((task) => {
+        newRegistry.set(task.id, task.tags);
       });
-    }
-    if (selectedStatuses.length > 0) {
-      filtered = filtered.filter((task) =>
-        selectedStatuses.includes(task.status)
-      );
-    }
-    return filtered.map((task) => task.id);
-  };
-
-  const reloadTasks = () => {
-    const newTasks = getAllTasks(app);
-    setTasks(newTasks);
-    // Rebuild the tag registry from the reloaded tasks
-    const newRegistry = new Map<string, string[]>();
-    newTasks.forEach((task) => {
-      newRegistry.set(task.id, task.tags);
-    });
-    setTaskTagsRegistry(newRegistry);
-  };
+      setTaskTagsRegistry(newRegistry);
+      setIsLoading(false);
+      new Notice("Tasks reloaded");
+    }, 0);
+  }, [app]);
 
   const updateTaskTags = useCallback((taskId: string, newTags: string[]) => {
     setTaskTagsRegistry((prevRegistry) => {
@@ -150,6 +125,47 @@ export default function TaskMapGraphView({ settings }: TaskMapGraphViewProps) {
       return newRegistry;
     });
   }, []);
+
+  const handleDeleteTask = useCallback((taskId: string) => {
+    skipFitViewRef.current = true;
+    setTasks((prevTasks) => prevTasks.filter((t) => t.id !== taskId));
+    setTaskTagsRegistry((prevRegistry) => {
+      const newRegistry = new Map(prevRegistry);
+      newRegistry.delete(taskId);
+      return newRegistry;
+    });
+  }, []);
+
+  useEffect(() => {
+    // Get the Dataview plugin to check index status
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const dataviewPlugin = (app as any).plugins?.plugins?.["dataview"];
+
+    // Check if Dataview index is already initialized
+    if (dataviewPlugin?.index?.initialized) {
+      // Index already ready, load tasks immediately
+      reloadTasks();
+    } else {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const metadataCache = (app as any).metadataCache;
+      const eventRef = metadataCache.on("dataview:index-ready", () => {
+        reloadTasks();
+      });
+
+      return () => {
+        metadataCache.offref(eventRef);
+      };
+    }
+  }, [app, reloadTasks]);
+
+  // Update tag registry when tasks change
+  useEffect(() => {
+    const newRegistry = new Map<string, string[]>();
+    tasks.forEach((task) => {
+      newRegistry.set(task.id, task.tags);
+    });
+    setTaskTagsRegistry(newRegistry);
+  }, [tasks]);
 
   useEffect(() => {
     let newNodes = createNodesFromTasks(
@@ -160,7 +176,8 @@ export default function TaskMapGraphView({ settings }: TaskMapGraphViewProps) {
       settings.debugVisualization,
       settings.tagColorMode,
       settings.tagColorSeed,
-      settings.tagStaticColor
+      settings.tagStaticColor,
+      handleDeleteTask
     );
     let newEdges = createEdgesFromTasks(
       tasks,
@@ -173,6 +190,7 @@ export default function TaskMapGraphView({ settings }: TaskMapGraphViewProps) {
       selectedTags,
       selectedStatuses
     );
+
     newNodes = newNodes.filter((n) => filteredNodeIds.includes(n.id));
     newEdges = newEdges.filter(
       (e) =>
@@ -182,22 +200,30 @@ export default function TaskMapGraphView({ settings }: TaskMapGraphViewProps) {
     const layoutedNodes = getLayoutedElements(
       newNodes,
       newEdges,
-      settings.layoutDirection
+      settings.layoutDirection,
+      settings.showTags
     );
+
     setNodes(layoutedNodes);
     setEdges(newEdges);
 
-    // Initialize tag registry when tasks change
-    const newRegistry = new Map<string, string[]>();
-    tasks.forEach((task) => {
-      newRegistry.set(task.id, task.tags);
-    });
-    setTaskTagsRegistry(newRegistry);
-
-    setTimeout(() => {
-      reactFlowInstance.fitView({ duration: 400 });
-    }, 1000); // Allow time for DOM updates
-  }, [tasks, selectedTags, selectedStatuses]);
+    if (skipFitViewRef.current) {
+      skipFitViewRef.current = false;
+    } else {
+      setTimeout(() => {
+        reactFlowInstance.fitView({ duration: 400 });
+      }, 1000);
+    }
+  }, [
+    tasks,
+    selectedTags,
+    selectedStatuses,
+    settings,
+    reactFlowInstance,
+    setNodes,
+    setEdges,
+    handleDeleteTask,
+  ]);
 
   const nodeTypes = useMemo(() => ({ task: TaskNode }), []);
   const edgeTypes = useMemo(() => ({ hash: HashEdge }), []);
@@ -244,7 +270,6 @@ export default function TaskMapGraphView({ settings }: TaskMapGraphViewProps) {
 
       if (!vault || !sourceTask || !targetTask) return;
 
-      // Check if tasks are of different types
       if (sourceTask.type !== targetTask.type) {
         new Notice(
           "Cannot create edges between different task types (dataview and note-based tasks). Both tasks must be of the same type.",
@@ -297,6 +322,12 @@ export default function TaskMapGraphView({ settings }: TaskMapGraphViewProps) {
   return (
     <TagsContext.Provider value={tagsContextValue}>
       <div className="tasks-map-graph-container">
+        {isLoading && (
+          <div className="tasks-map-loading-container">
+            <div className="tasks-map-spinner" />
+            <div className="tasks-map-loading-text">Loading tasks...</div>
+          </div>
+        )}
         <ReactFlow
           nodes={nodes}
           edges={edges}
