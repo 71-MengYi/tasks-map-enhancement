@@ -48,6 +48,7 @@ export default function TaskNode({ data, selected }: NodeProps<TaskNodeData>) {
     tagColorMode = "random",
     tagColorSeed = 42,
     tagStaticColor = "#3b82f6",
+    onDeleteTask,
   } = data;
 
   const { allTags, updateTaskTags } = useContext(TagsContext);

@@ -1,9 +1,15 @@
 import React from "react";
-import { App, FileView, MarkdownView, TFile, WorkspaceLeaf } from "obsidian";
+import {
+  App,
+  Editor,
+  FileView,
+  MarkdownView,
+  TFile,
+  WorkspaceLeaf,
+} from "obsidian";
 import { ArrowUpRight } from "lucide-react";
 import { Task } from "../types/task";
 import { findTaskLineByIdOrText } from "../lib/utils";
-import { LineHighlighter } from "./line-hightlight";
 
 interface LinkButtonProps {
   taskStatus?: "todo" | "done" | "canceled" | "in_progress";
@@ -11,8 +17,6 @@ interface LinkButtonProps {
   app: App;
   task: Task;
 }
-
-const highlighter = new LineHighlighter();
 
 // Detect if the file is already opened in a leaf.
 // Checks both loaded views and deferred/unactivated tabs.
@@ -51,7 +55,6 @@ export const LinkButton = ({
   const handleClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    // app.workspace.openLinkText(link, link);
 
     // Try to find the file obj
     const abstractFile = app.vault.getAbstractFileByPath(link);
@@ -60,9 +63,8 @@ export const LinkButton = ({
       throw new Error(`File not found: ${link}`);
     }
 
-    // Find the opened tab
     const existingLeaf = findLeafWithFile(app, link);
-    let targetLeaf: WorkspaceLeaf;
+    let targetLeaf: WorkspaceLeaf | null;
 
     if (existingLeaf) {
       await app.workspace.revealLeaf(existingLeaf);
@@ -70,31 +72,67 @@ export const LinkButton = ({
       targetLeaf = existingLeaf;
     } else {
       await app.workspace.openLinkText(link, link);
-      targetLeaf = app.workspace.getLeaf("tab");
+      targetLeaf = findLeafWithFile(app, link);
     }
 
     // Wait for the view to be fully loaded
-    setTimeout(() => {
-      if (targetLeaf.view instanceof MarkdownView) {
-        const editor = targetLeaf.view.editor;
-
-        if (editor && task?.text) {
-          // Search for the exact task text in the document
-          const content = editor.getValue();
-
-          // Find the line containing the task text
-          const lines = content.split("\n");
-
-          let lineIdx = findTaskLineByIdOrText(lines, task.id, task.text);
-
-          console.info("lineIdx: ", lineIdx);
-          lineIdx = getAdjustedSourceLine(app, lineIdx);
-
-          // Highlight the line
-          highlighter.highlightLine(app, lineIdx, 2000);
-        }
+    const highlightTask = async () => {
+      if (!targetLeaf || !(targetLeaf.view instanceof MarkdownView)) {
+        return;
       }
-    }, 200); // Small delay to ensure the editor is fully loaded
+
+      const editor = targetLeaf.view.editor;
+      if (!editor || !task?.text) {
+        return;
+      }
+
+      // Search for the exact task text in the document
+      const content = editor.getValue();
+      const lines = content.split("\n");
+      let lineIdx = findTaskLineByIdOrText(lines, task.id, task.text);
+
+      if (lineIdx === -1) {
+        return; // Task not found
+      }
+
+      // lineIdx = getAdjustedSourceLine(app, lineIdx);
+
+      const scrollAndSelect = async (editor: Editor, lineIdx: number) => {
+        const scrollPromise = new Promise<void>((resolve) => {
+          editor.scrollIntoView(
+            {
+              from: { line: lineIdx, ch: 0 },
+              to: { line: lineIdx, ch: 0 },
+            },
+            true
+          );
+
+          // wait for scroll
+          setTimeout(resolve, 350);
+        });
+
+        await scrollPromise;
+
+        editor.setCursor({ line: lineIdx, ch: 0 });
+        const lineLength = editor.getLine(lineIdx).length;
+        editor.setSelection(
+          { line: lineIdx, ch: 0 },
+          { line: lineIdx, ch: lineLength }
+        );
+      };
+
+      await scrollAndSelect(editor, lineIdx);
+    };
+
+    const waitForEditor = () => {
+      if (targetLeaf && targetLeaf.view instanceof MarkdownView) {
+        highlightTask();
+      } else {
+        setTimeout(waitForEditor, 100);
+      }
+    };
+
+    setTimeout(waitForEditor, 100);
   };
 
   return (
@@ -105,49 +143,4 @@ export const LinkButton = ({
       <ArrowUpRight size={16} />
     </button>
   );
-};
-
-const getAdjustedSourceLine = (app: App, renderedLine: number): number => {
-  const markdownView = app.workspace.getActiveViewOfType(MarkdownView);
-  if (!markdownView) {
-    console.warn("No active markdown editor");
-    return renderedLine;
-  }
-  const currentMode = markdownView.getMode();
-
-  // If in "source", default live source
-  if (currentMode === "source") {
-    const editor = markdownView.editor;
-    const content = editor.getValue();
-    const lines = content.split("\n");
-
-    const frontmatterEndLine = findFrontmatterEndLine(lines);
-
-    const safeLine = Math.min(renderedLine, lines.length - 1);
-
-    return safeLine - frontmatterEndLine;
-  }
-
-  // In preview
-  if (currentMode === "preview") {
-    // TODO: preview
-    return renderedLine;
-  }
-
-  console.warn(`Unknown Mode: ${currentMode}`);
-  return renderedLine;
-};
-
-const findFrontmatterEndLine = (lines: string[]): number => {
-  if (lines.length < 2 || lines[0] !== "---") {
-    return 0;
-  }
-
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i] === "---") {
-      return i + 1;
-    }
-  }
-
-  return 0;
 };
