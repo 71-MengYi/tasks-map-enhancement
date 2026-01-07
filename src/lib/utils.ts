@@ -163,6 +163,69 @@ export async function updateTaskStatusInVault(
   });
 }
 
+export async function addTaskLineToVault(
+  task: Task,
+  newTaskLine: string,
+  app: App
+): Promise<void> {
+  if (!task.link) {
+    console.log("!task.link: ", newTaskLine);
+    return;
+  }
+  const vault = app?.vault;
+  if (!vault) {
+    console.log("!vault: ", newTaskLine);
+    return;
+  }
+  const file = vault.getFileByPath(task.link);
+  if (!file) {
+    console.log("!file: ", newTaskLine);
+    return;
+  }
+
+  // Handle note-based tasks, create a new file in same folder
+  if (task.type === "note") {
+    const originalFile = vault.getFileByPath(task.link);
+    if (!originalFile) {
+      console.log("!originalFile: ", newTaskLine);
+      return;
+    }
+
+    const folderPath = originalFile.parent?.path;
+    if (!folderPath) {
+      console.log("!folderPath: ", newTaskLine);
+      return;
+    }
+
+    const timestamp = Date.now();
+    const newFileName = `Task-${timestamp}.md`;
+    const newFilePath = `${folderPath}/${newFileName}`;
+
+    await vault.create(newFilePath, `# ${task.text}\n\n${task.text}`);
+
+    return;
+  }
+
+  // Handle dataview tasks, add task at next line
+  await vault.process(file, (fileContent) => {
+    const lines = fileContent.split(/\r?\n/);
+    const taskLineIdx = findTaskLineByIdOrText(lines, task.id, task.text);
+
+    if (taskLineIdx === -1) {
+      console.log("taskLineIdx === -1: ", newTaskLine);
+      return fileContent;
+    }
+
+    if (task.type === "dataview") {
+      const insertIdx = Math.min(taskLineIdx + 1, lines.length);
+
+      lines.splice(insertIdx, 0, newTaskLine);
+    }
+
+    return lines.join("\n");
+  });
+}
+
 export async function deleteTaskFromVault(task: Task, app: App): Promise<void> {
   if (!task.link) return;
   const vault = app?.vault;
