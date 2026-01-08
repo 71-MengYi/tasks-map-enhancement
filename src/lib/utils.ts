@@ -1,5 +1,5 @@
 import dagre from "@dagrejs/dagre";
-import { App, TFile, Vault } from "obsidian";
+import { App, Notice, TFile, Vault } from "obsidian";
 import { Task, TaskStatus, TaskNode, TaskEdge, RawTask } from "src/types/task";
 import { NODEHEIGHT, NODEWIDTH } from "src/components/task-node";
 import { TaskFactory } from "./task-factory";
@@ -827,6 +827,8 @@ export async function addSignToTaskInFile(
     const taskLineIdx = lines.findIndex((line) => line.includes(task.text));
     if (taskLineIdx === -1) return fileContent;
 
+    const oldLine = lines[taskLineIdx];
+
     if (type === "id") {
       // Check if any ID format is already present
       const emojiIdPresent = /🆔\s*[a-zA-Z0-9]{6}/.test(lines[taskLineIdx]);
@@ -932,6 +934,12 @@ export async function addSignToTaskInFile(
       }
     }
 
+    if (lines[taskLineIdx] === oldLine) {
+      new Notice("Failed to add the edge!");
+    } else {
+      new Notice("Edge added successfully.");
+    }
+
     return lines.join("\n");
   });
 }
@@ -1027,6 +1035,8 @@ export async function removeSignFromTaskInFile(
     const taskLineIdx = lines.findIndex((line) => line.includes(task.text));
     if (taskLineIdx === -1) return fileContent;
 
+    const oldLine = lines[taskLineIdx];
+
     if (type === "id") {
       // Remove emoji ID sign
       const emojiSign = `🆔 ${hash}`;
@@ -1034,6 +1044,11 @@ export async function removeSignFromTaskInFile(
         lines[taskLineIdx] = lines[taskLineIdx]
           .replace(emojiSign, "")
           .replace(/\s+$/, "");
+        if (lines[taskLineIdx] === oldLine) {
+          new Notice("Failed to delete the edge!");
+        } else {
+          new Notice("Edge deleted successfully.");
+        }
         return lines.join("\n");
       }
 
@@ -1099,6 +1114,12 @@ export async function removeSignFromTaskInFile(
           }
         }
       }
+    }
+
+    if (lines[taskLineIdx] === oldLine) {
+      new Notice("Failed to delete the edge!");
+    } else {
+      new Notice("Edge deleted successfully.");
     }
 
     return lines.join("\n");
