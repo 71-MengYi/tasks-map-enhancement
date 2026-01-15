@@ -8,14 +8,14 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import { ArrowUpRight } from "lucide-react";
-import { Task } from "../types/task";
 import { findTaskLineByIdOrText } from "../lib/utils";
+import { BaseTask } from "../types/base-task";
 
 interface LinkButtonProps {
   taskStatus?: "todo" | "done" | "canceled" | "in_progress";
   link: string;
   app: App;
-  task: Task;
+  task: BaseTask;
 }
 
 // Detect if the file is already opened in a leaf.

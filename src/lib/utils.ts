@@ -1,6 +1,6 @@
 // Task utility functions - refactored to use OOP with polymorphism
 import dagre from "@dagrejs/dagre";
-import { App, TFile, Vault } from "obsidian";
+import { App, Notice, TFile, Vault } from "obsidian";
 import { TaskStatus, TaskNode, TaskEdge, RawTask } from "src/types/task";
 import { BaseTask } from "src/types/base-task";
 import { NODEHEIGHT, NODEWIDTH } from "src/components/task-node";
