@@ -1,5 +1,6 @@
 import { Vault } from "./mocks/obsidian";
-import { Task } from "../src/types/task";
+import { BaseTask } from "../src/types/task";
+import { NoteTask } from "../src/types/note-task";
 import {
   addLinkSignsBetweenTasks,
   removeLinkSignsBetweenTasks,
@@ -25,29 +26,29 @@ tags:
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
+      const toTask: Task = new NoteTask({
         id: taskPath,
         text: "Task1",
+        summary: "Task1",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      });
 
-      const fromTask: Task = {
+      const fromTask: Task = new NoteTask({
         id: "TaskNotes/Tasks/Task2.md",
         text: "Task2",
+        summary: "Task2",
         link: "TaskNotes/Tasks/Task2.md",
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      });
 
       await addLinkSignsBetweenTasks(vault, fromTask, toTask, "abc123");
 
@@ -81,29 +82,29 @@ blockedBy:
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "Task1",
+        summary: "Task1",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
-      const fromTask: Task = {
-        id: "TaskNotes/Tasks/Task3.md",
+      const fromTask: Task = new NoteTask({
+id: "TaskNotes/Tasks/Task3.md",
         text: "Task3",
+        summary: "Task3",
         link: "TaskNotes/Tasks/Task3.md",
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       await addLinkSignsBetweenTasks(vault, fromTask, toTask, "def456");
 
@@ -141,29 +142,29 @@ tags:
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "Task1",
+        summary: "Task1",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "⏫",
         tags: ["urgent", "work"],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
-      const fromTask: Task = {
-        id: "TaskNotes/Tasks/Task2.md",
+      const fromTask: Task = new NoteTask({
+id: "TaskNotes/Tasks/Task2.md",
         text: "Task2",
+        summary: "Task2",
         link: "TaskNotes/Tasks/Task2.md",
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       await addLinkSignsBetweenTasks(vault, fromTask, toTask, "xyz789");
 
@@ -276,17 +277,17 @@ blockedBy:
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "Task1",
+        summary: "Task1",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       const fromTaskId = "TaskNotes/Tasks/Task2.md";
 
@@ -327,17 +328,17 @@ tags:
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "Task1",
+        summary: "Task1",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: ["work"],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       const fromTaskId = "TaskNotes/Tasks/Task2.md";
 
@@ -371,17 +372,17 @@ blockedBy:
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "Task1",
+        summary: "Task1",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       // Remove Task2
       await removeLinkSignsBetweenTasks(
@@ -394,17 +395,17 @@ blockedBy:
       expect(updatedContent).not.toContain("[[Task2]]");
 
       // Add Task3
-      const newFromTask: Task = {
-        id: "TaskNotes/Tasks/Task3.md",
+      const newFromTask: Task = new NoteTask({
+id: "TaskNotes/Tasks/Task3.md",
         text: "Task3",
+        summary: "Task3",
         link: "TaskNotes/Tasks/Task3.md",
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       await addLinkSignsBetweenTasks(vault, newFromTask, toTask, "new123");
 
@@ -438,18 +439,17 @@ priority: Normal
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "Task1",
         summary: "Task1",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       const fromTask1: Task = {
         id: "TaskNotes/Tasks/Task2.md",
@@ -528,18 +528,17 @@ tags:
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "MainTask",
         summary: "MainTask",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: ["urgent"],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       const dep1: Task = {
         id: "TaskNotes/Tasks/Dependency1.md",
@@ -604,18 +603,17 @@ status: open
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "Task1",
         summary: "Task1",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       const tasks = [
         {
@@ -690,18 +688,17 @@ status: open
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "MainTask",
         summary: "MainTask",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       const tasks = ["TaskA", "TaskB", "TaskC"].map((name) => ({
         id: `TaskNotes/Tasks/${name}.md`,
@@ -766,18 +763,17 @@ blockedBy:
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "Task1",
         summary: "Task1",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       const fromTask3: Task = {
         id: "TaskNotes/Tasks/Task3.md",
@@ -832,18 +828,17 @@ blockedBy:
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "Task1",
         summary: "Task1",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       const fromTask2: Task = {
         id: "TaskNotes/Tasks/Task2.md",
@@ -895,18 +890,17 @@ status: open
 
       vault.setFileContent(taskPath, initialContent);
 
-      const toTask: Task = {
-        id: taskPath,
+      const toTask: Task = new NoteTask({
+id: taskPath,
         text: "MainTask",
         summary: "MainTask",
         link: taskPath,
-        type: "note",
         status: "todo",
         priority: "",
         tags: [],
         starred: false,
         incomingLinks: [],
-      };
+      })
 
       const taskX: Task = {
         id: "TaskNotes/Tasks/TaskX.md",
