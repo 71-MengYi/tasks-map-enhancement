@@ -151,7 +151,7 @@ export class DataviewTask extends BaseTask {
         // 没有emoji，添加到行末
         lines[taskLineIdx] = line + " ⭐";
       }
-      
+
       return lines.join("\n");
     });
   }
