@@ -15,8 +15,10 @@ import {
   removeLinkSignsBetweenTasks,
   createNodesFromTasks,
   createEdgesFromTasks,
+  addTaskLineToVault,
+  addIsolatedTaskLineToVault,
 } from "src/lib/utils";
-import { BaseTask } from "src/types/task";
+import { BaseTask, RawTask } from "src/types/task";
 import GuiOverlay from "src/components/gui-overlay";
 import TaskNode from "src/components/task-node";
 import { NO_TAGS_VALUE } from "src/components/tag-select";
@@ -27,6 +29,9 @@ import { TagsContext } from "src/contexts/context";
 
 import { TaskStatus } from "src/types/task";
 import { TasksMapSettings } from "src/types/settings";
+import { NoteTask } from "../types/note-task";
+import { DataviewTask } from "../types/dataview-task";
+import { TaskFactory } from "../lib/task-factory";
 
 const ALL_STATUSES: TaskStatus[] = ["todo", "in_progress", "done", "canceled"];
 
@@ -258,9 +263,80 @@ export default function TaskMapGraphView({
     setSelectedEdge(null);
   }, [setSelectedEdge]);
 
-  const onPaneClick = useCallback(() => {
-    setSelectedEdge(null);
-  }, [setSelectedEdge]);
+  const onPaneClick = useCallback(
+    async (event: React.MouseEvent) => {
+      if (event.detail !== 2) {
+        setSelectedEdge(null);
+        return;
+      }
+
+      const bounds = containerRef.current?.getBoundingClientRect();
+      if (!bounds) return;
+
+      const position = reactFlowInstance.project({
+        x: event.clientX - bounds.left,
+        y: event.clientY - bounds.top,
+      });
+
+      const tempTaskId = `${Date.now()}`;
+      const factory = new TaskFactory();
+
+      // @ts-ignore
+      const tasksPlugin = app.plugins.plugins["obsidian-tasks-plugin"];
+      if (!tasksPlugin?.apiV1) {
+        console.error("Tasks plugin not found or API not available");
+        return;
+      }
+      const tasksApi = tasksPlugin.apiV1;
+
+      let taskLine = await tasksApi.createTaskLineModal();
+      if (!taskLine) {
+        new Notice("Task creation cancelled.");
+        return;
+      }
+      const rawTask: RawTask = {
+        status: "todo",
+        text: taskLine,
+        link: {
+          path: settings.taskInbox,
+        },
+      };
+      const newTask = factory.parse(rawTask, "dataview");
+
+      skipFitViewRef.current = true;
+      setNodes((nds) => [
+        ...nds,
+        {
+          id: tempTaskId,
+          type: "task",
+          position: position,
+          data: {
+            task: newTask,
+            layoutDirection: "Horizontal",
+            showPriorities: true,
+            showTags: true,
+            debugVisualization: false,
+            tagColorMode: "random",
+            tagColorSeed: 42,
+            tagStaticColor: "#3b82f6",
+            isTemp: false,
+          },
+          // sourcePosition,
+          // targetPosition,
+          draggable: true,
+        },
+      ]);
+
+      await addIsolatedTaskLineToVault(
+        taskLine,
+        settings.taskInbox,
+        app
+      );
+
+      new Notice("New task has been created!");
+    },
+    [setSelectedEdge]
+  );
 
   const onDeleteSelectedEdge = useCallback(async () => {
     if (!selectedEdge) return;
