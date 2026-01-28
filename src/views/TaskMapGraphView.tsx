@@ -5,7 +5,6 @@ import ReactFlow, {
   useEdgesState,
   addEdge,
   useReactFlow,
-  Position,
   OnConnectStartParams,
 } from "reactflow";
 import { Notice } from "obsidian";
@@ -311,9 +310,9 @@ export default function TaskMapGraphView({
     if (skipFitViewRef.current) {
       skipFitViewRef.current = false;
     } else {
-      setTimeout(() => {
-        reactFlowInstance.fitView({ duration: 400 });
-      }, 1000);
+      // setTimeout(() => {
+      //   reactFlowInstance.fitView({ duration: 400 });
+      // }, 1000);
     }
   }, [
     tasks,
@@ -343,96 +342,53 @@ export default function TaskMapGraphView({
     setSelectedEdge(null);
   }, [setSelectedEdge]);
 
-  const onPaneClick = useCallback(
-    async (event: React.MouseEvent) => {
-      if (event.detail !== 2) {
-        setSelectedEdge(null);
-        return;
-      }
+  const createTasks = useCallback(async () => {
+    // @ts-ignore
+    const tasksPlugin = app.plugins.plugins["obsidian-tasks-plugin"];
+    if (!tasksPlugin?.apiV1) {
+      console.error("Tasks plugin not found or API not available");
+      return;
+    }
+    const tasksApi = tasksPlugin.apiV1;
 
-      const bounds = containerRef.current?.getBoundingClientRect();
-      if (!bounds) return;
+    let taskLine = await tasksApi.createTaskLineModal();
+    if (!taskLine) {
+      new Notice("Task creation cancelled.");
+      return;
+    }
 
-      const position = reactFlowInstance.project({
-        x: event.clientX - bounds.left,
-        y: event.clientY - bounds.top,
-      });
+    await addIsolatedTaskLineToVault(taskLine, settings.taskInbox, app);
 
-      // @ts-ignore
-      const tasksPlugin = app.plugins.plugins["obsidian-tasks-plugin"];
-      if (!tasksPlugin?.apiV1) {
-        console.error("Tasks plugin not found or API not available");
-        return;
-      }
-      const tasksApi = tasksPlugin.apiV1;
+    const factory = new TaskFactory();
+    const rawTask: RawTask = {
+      status: "todo",
+      text: taskLine,
+      link: {
+        path: settings.taskInbox,
+      },
+    };
+    const newTask = factory.parse(rawTask, "dataview");
 
-      let taskLine = await tasksApi.createTaskLineModal();
-      if (!taskLine) {
-        new Notice("Task creation cancelled.");
-        return;
-      }
+    const tagsToAdd = selectedTags.filter((tag) => tag !== NO_TAGS_VALUE);
+    for (const tag of tagsToAdd) {
+      await newTask.addTag(tag, app);
+    }
 
-      const tagsToAdd = selectedTags.filter((tag) => tag !== NO_TAGS_VALUE);
-      if (tagsToAdd.length > 0) {
-        const formattedTags = tagsToAdd.map((tag) => `#${tag}`).join(" ");
-        taskLine = `${taskLine} ${formattedTags}`;
-      }
+    new Notice("New task has been created!");
 
-      const factory = new TaskFactory();
-      const rawTask: RawTask = {
-        status: "todo",
-        text: taskLine,
-        link: {
-          path: settings.taskInbox,
-        },
-      };
-      const newTask = factory.parse(rawTask, "dataview");
-
-      const isVertical = settings.layoutDirection === "Vertical";
-      const sourcePosition = isVertical ? Position.Bottom : Position.Right;
-      const targetPosition = isVertical ? Position.Top : Position.Left;
-
-      setTasks((tks) => [...tks, newTask]);
-
-      skipFitViewRef.current = true;
-      setNodes((nds) => [
-        ...nds,
-        {
-          id: newTask.id,
-          type: "task",
-          position: position,
-          data: {
-            task: newTask,
-            layoutDirection: settings.layoutDirection,
-            showPriorities: settings.showPriorities,
-            showTags: settings.showTags,
-            debugVisualization: settings.debugVisualization,
-            tagColorMode: settings.tagColorMode,
-            tagColorSeed: settings.tagColorSeed,
-            tagStaticColor: settings.tagStaticColor,
-            onDeleteTask: handleDeleteTask,
-          },
-          sourcePosition,
-          targetPosition,
-          draggable: true,
-        },
-      ]);
-
-      await addIsolatedTaskLineToVault(taskLine, settings.taskInbox, app);
-
-      new Notice("New task has been created!");
-    },
-    [
-      setSelectedEdge,
-      selectedTags,
-      app,
-      handleDeleteTask,
-      reactFlowInstance,
-      settings,
-      setNodes,
-      setTasks,
-    ]
-  );
+    setTimeout(() => {
+      reloadTasks();
+    }, 200);
+  }, [
+    setSelectedEdge,
+    selectedTags,
+    app,
+    handleDeleteTask,
+    reactFlowInstance,
+    settings,
+    setNodes,
+    setTasks,
+  ]);
 
   const onDeleteSelectedEdge = useCallback(async () => {
     if (!selectedEdge) return;
@@ -524,17 +480,8 @@ export default function TaskMapGraphView({
       ) {
         const {
           nodeId: sourceNodeId,
-          handleId: sourceHandleId,
           handleType: sourceHandleType,
         } = connectionStartHandle;
-
-        const bounds = containerRef.current?.getBoundingClientRect();
-        if (!bounds) return;
-
-        const position = reactFlowInstance.project({
-          x: (event as MouseEvent).clientX - bounds.left,
-          y: (event as MouseEvent).clientY - bounds.top,
-        });
 
         // @ts-ignore
         const tasksPlugin = app.plugins.plugins["obsidian-tasks-plugin"];
@@ -551,30 +498,11 @@ export default function TaskMapGraphView({
           return;
         }
 
-        const tagsToAdd = selectedTags.filter((tag) => tag !== NO_TAGS_VALUE);
-        if (tagsToAdd.length > 0) {
-          const formattedTags = tagsToAdd.map((tag) => `#${tag}`).join(" ");
-          taskLine = `${taskLine} ${formattedTags}`;
-        }
+        await addIsolatedTaskLineToVault(taskLine, settings.taskInbox, app);
 
         const sourceTask = tasks.find((t) => t.id === sourceNodeId);
         if (!sourceTask) {
           new Notice("Source task not found for linking.");
-          connectionStartHandleRef.current = null;
-          return;
-        }
-
-        // 根据 handleType 决定链接方向和符号
-        if (sourceHandleType === "source") {
-          // 从源节点的 source handle 拖拽，表示 sourceNodeId -> newTask
-          // newTask 是目标，所以 newTask 获得 ⛔ sourceTask.id
-          taskLine = `${taskLine} ⛔ ${sourceTask.id}`;
-        } else if (sourceHandleType === "target") {
-          // 从源节点的 target handle 拖拽，表示 newTask -> sourceNodeId
-          // newTask 是源，所以 newTask 获得 🆔 sourceTask.id
-          taskLine = `${taskLine} 🆔 ${sourceTask.id}`;
-        } else {
-          new Notice("Unknown handle type. Cannot create link.");
           connectionStartHandleRef.current = null;
           return;
         }
@@ -589,78 +517,34 @@ export default function TaskMapGraphView({
         };
         const newTask = factory.parse(rawTask, "dataview");
 
-        const isVertical = settings.layoutDirection === "Vertical";
-        const sourcePositionHandle = isVertical
-          ? Position.Bottom
-          : Position.Right;
-        const targetPositionHandle = isVertical ? Position.Top : Position.Left;
+        const tagsToAdd = selectedTags.filter((tag) => tag !== NO_TAGS_VALUE);
+        for (const tag of tagsToAdd) {
+          await newTask.addTag(tag, app);
+        }
 
-        setTasks((tks) => [...tks, newTask]);
-
-        skipFitViewRef.current = true;
-        setNodes((nds) => [
-          ...nds,
-          {
-            id: newTask.id,
-            type: "task",
-            position: position,
-            data: {
-              task: newTask,
-              layoutDirection: settings.layoutDirection,
-              showPriorities: settings.showPriorities,
-              showTags: settings.showTags,
-              debugVisualization: settings.debugVisualization,
-              tagColorMode: settings.tagColorMode,
-              tagColorSeed: settings.tagColorSeed,
-              tagStaticColor: settings.tagStaticColor,
-              onDeleteTask: handleDeleteTask,
-            },
-            sourcePosition: sourcePositionHandle,
-            targetPosition: targetPositionHandle,
-            draggable: true,
-          },
-        ]);
-
-        await addIsolatedTaskLineToVault(taskLine, settings.taskInbox, app);
+        if (sourceHandleType === "source") {
+          await addLinkSignsBetweenTasks(
+            vault,
+            sourceTask,
+            newTask,
+            settings.linkingStyle
+          );
+        } else if (sourceHandleType === "target") {
+          await addLinkSignsBetweenTasks(
+            vault,
+            newTask,
+            sourceTask,
+            settings.linkingStyle
+          );
+        } else {
+          new Notice("Unknown handle type. Cannot create link.");
+          connectionStartHandleRef.current = null;
+          return;
+        }
 
         new Notice("New task has been created!");
 
-		  // 根据 handleType 确定 onConnect 的参数
-		  let actualEdgeSourceId: string;
-		  let actualEdgeTargetId: string;
-		  let actualSourceHandleForEdge: string | null;
-		  let actualTargetHandleForEdge: string | null;
-
-		  // 假设 TaskNode 的 handle ID 遵循 "top", "bottom", "left", "right" 约定
-		  const newNodesTargetHandleId = isVertical ? "top" : "left";
-		  const newNodesSourceHandleId = isVertical ? "bottom" : "right";
-
-		  if (sourceHandleType === 'source') {
-			  // 链接方向: sourceNodeId -> newTask
-			  actualEdgeSourceId = sourceNodeId;
-			  actualEdgeTargetId = newTask.id;
-			  actualSourceHandleForEdge = sourceHandleId; // 原始节点的 source handle
-			  actualTargetHandleForEdge = newNodesTargetHandleId; // 新节点的 target handle
-		  } else if (sourceHandleType === 'target') {
-			  // 链接方向: newTask -> sourceNodeId
-			  actualEdgeSourceId = newTask.id;
-			  actualEdgeTargetId = sourceNodeId;
-			  actualSourceHandleForEdge = newNodesSourceHandleId; // 新节点的 source handle
-			  actualTargetHandleForEdge = sourceHandleId; // 原始节点的 target handle
-		  } else {
-			  // 这种情况应该在前面处理过，但为了安全再次检查
-			  new Notice("Unknown handle type. Cannot create edge.");
-			  connectionStartHandleRef.current = null;
-			  return;
-		  }
-
-		  const newEdgeParams = {
-			  source: actualEdgeSourceId,
-			  target: actualEdgeTargetId,
-			  sourceHandle: actualSourceHandleForEdge,
-			  targetHandle: actualTargetHandleForEdge,
-		  };
-		  await onConnect(newEdgeParams);
+        setTimeout(()=>{reloadTasks();}, 200);
       }
       connectionStartHandleRef.current = null;
     },
@@ -709,7 +593,6 @@ export default function TaskMapGraphView({
           onConnect={onConnect}
           onEdgeClick={onEdgeClick}
           onNodeClick={onNodeClick}
-          onPaneClick={onPaneClick}
           onConnectStart={onConnectStart}
           onConnectEnd={onConnectEnd}
         >
@@ -722,6 +605,7 @@ export default function TaskMapGraphView({
             allFiles={allFiles}
             selectedFiles={selectedFiles}
             setSelectedFiles={setSelectedFiles}
+            createTasks={createTasks}
             reloadTasks={reloadTasks}
             allStatuses={ALL_STATUSES}
             selectedStatuses={selectedStatuses}

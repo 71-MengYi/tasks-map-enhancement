@@ -14,6 +14,7 @@ interface GuiOverlayProps {
   allFiles: string[];
   selectedFiles: string[];
   setSelectedFiles: (files: string[]) => void; // eslint-disable-line no-unused-vars
+  createTasks: () => void;
   reloadTasks: () => void;
   allStatuses: TaskStatus[];
   selectedStatuses: TaskStatus[];
@@ -33,6 +34,7 @@ export default function GuiOverlay(props: GuiOverlayProps) {
     allFiles,
     selectedFiles,
     setSelectedFiles,
+    createTasks,
     reloadTasks,
     allStatuses,
     selectedStatuses,
@@ -130,6 +132,16 @@ export default function GuiOverlay(props: GuiOverlayProps) {
                 </label>
               </div>
             )}
+          </div>
+
+          {/* Create Button */}
+          <div className="tasks-map-filter-actions">
+            <button
+              onClick={createTasks}
+              className="tasks-map-gui-overlay-reload-button"
+            >
+              {t("filters.create_tasks")}
+            </button>
           </div>
 
           {/* Reload Button */}
