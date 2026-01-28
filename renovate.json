@@ -8,16 +8,14 @@
 	"automergeType": "pr",
 	"packageRules": [
 		{
-			"matchDepTypes": ["devDependencies"],
-			"labels": ["semver-noimpact"]
+			"matchPackageNames": ["@dagrejs/dagre"],
+			"allowedVersions": "<2.0.0",
+			"description": "Pin dagre to v1.x - v2 has bundling issues with external graphlib dependency"
 		},
-		{
-			"matchManagers": ["github-actions"],
-			"labels": ["semver-noimpact"]
-		},
-		{
-			"matchDepTypes": ["dependencies"],
-			"labels": ["semver-patch"]
-		}
+        {
+            "matchUpdateTypes": ["major"],
+            "automerge": false,
+            "description": "Do not automerge major updates"
+        }
 	]
 }
