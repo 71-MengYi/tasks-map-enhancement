@@ -1,10 +1,9 @@
 import React, { useState, useRef, useEffect } from "react";
 import { MoreVertical, Trash2 } from "lucide-react";
-import { App, Notice } from "obsidian";
-import { BaseTask, RawTask } from "src/types/task";
-import { CirclePlus, SquarePen } from "lucide-react";
+import { App } from "obsidian";
+import { BaseTask } from "src/types/task";
+import { SquarePen } from "lucide-react";
 import {
-  addTaskLineToVault,
   deleteTaskFromVault,
   findTaskLineByIdOrText,
 } from "../lib/utils";
@@ -13,14 +12,12 @@ interface TaskMenuProps {
   task: BaseTask;
   app: App;
   onTaskDeleted?: () => void;
-  onCreateTasked?: (taskLine: string) => void;
 }
 
 const TaskMenu = ({
   task,
   app,
   onTaskDeleted,
-  onCreateTasked,
 }: TaskMenuProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -49,30 +46,6 @@ const TaskMenu = ({
     e.preventDefault();
     e.stopPropagation();
     setIsOpen(!isOpen);
-  };
-
-  const handleCreate = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    setIsOpen(false);
-
-    // @ts-ignore
-    const tasksPlugin = app.plugins.plugins["obsidian-tasks-plugin"];
-    if (!tasksPlugin?.apiV1) {
-      console.error("Tasks plugin not found or API not available");
-      return;
-    }
-    const tasksApi = tasksPlugin.apiV1;
-
-    let taskLine = await tasksApi.createTaskLineModal();
-
-    // Do whatever you want with the returned value.
-    // It's just a string containing the Markdown for the task.
-    // console.log(taskLine);
-    await addTaskLineToVault(task, taskLine, app);
-
-    onCreateTasked?.(taskLine);
   };
 
   const handleEdit = async (e: React.MouseEvent) => {
@@ -146,10 +119,6 @@ const TaskMenu = ({
 
       {isOpen && (
         <div className="tasks-map-task-menu-dropdown">
-          <button className="tasks-map-task-menu-item" onClick={handleCreate}>
-            <CirclePlus size={12} />
-            <span>Create task</span>
-          </button>
           <button className="tasks-map-task-menu-item" onClick={handleEdit}>
             <SquarePen size={12} />
             <span>Edit task</span>

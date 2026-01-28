@@ -32,7 +32,6 @@ import { t } from "../i18n";
 import { TaskStatus } from "src/types/task";
 import { TasksMapSettings } from "src/types/settings";
 import { TaskFactory } from "../lib/task-factory";
-import { DataviewTask } from "../types/dataview-task";
 
 const ALL_STATUSES: TaskStatus[] = ["todo", "in_progress", "done", "canceled"];
 
@@ -121,6 +120,7 @@ export default function TaskMapGraphView({
   const connectionStartHandleRef = React.useRef<{
     nodeId: string | null;
     handleId: string | null;
+    handleType: "source" | "target" | null;
   } | null>(null);
   const skipFitViewRef = React.useRef(false);
 
@@ -457,6 +457,7 @@ export default function TaskMapGraphView({
       connectionStartHandleRef.current = {
         nodeId: params.nodeId,
         handleId: params.handleId,
+        handleType: params.handleType,
       };
     },
     []
@@ -521,8 +522,11 @@ export default function TaskMapGraphView({
         connectionStartHandle &&
         connectionStartHandle.nodeId
       ) {
-        const { nodeId: sourceNodeId, handleId: sourceHandleId } =
-          connectionStartHandle;
+        const {
+          nodeId: sourceNodeId,
+          handleId: sourceHandleId,
+          handleType: sourceHandleType,
+        } = connectionStartHandle;
 
         const bounds = containerRef.current?.getBoundingClientRect();
         if (!bounds) return;
@@ -551,6 +555,28 @@ export default function TaskMapGraphView({
         if (tagsToAdd.length > 0) {
           const formattedTags = tagsToAdd.map((tag) => `#${tag}`).join(" ");
           taskLine = `${taskLine} ${formattedTags}`;
+        }
+
+        const sourceTask = tasks.find((t) => t.id === sourceNodeId);
+        if (!sourceTask) {
+          new Notice("Source task not found for linking.");
+          connectionStartHandleRef.current = null;
+          return;
+        }
+
+        // 根据 handleType 决定链接方向和符号
+        if (sourceHandleType === "source") {
+          // 从源节点的 source handle 拖拽，表示 sourceNodeId -> newTask
+          // newTask 是目标，所以 newTask 获得 ⛔ sourceTask.id
+          taskLine = `${taskLine} ⛔ ${sourceTask.id}`;
+        } else if (sourceHandleType === "target") {
+          // 从源节点的 target handle 拖拽，表示 newTask -> sourceNodeId
+          // newTask 是源，所以 newTask 获得 🆔 sourceTask.id
+          taskLine = `${taskLine} 🆔 ${sourceTask.id}`;
+        } else {
+          new Notice("Unknown handle type. Cannot create link.");
+          connectionStartHandleRef.current = null;
+          return;
         }
 
         const factory = new TaskFactory();
@@ -599,16 +625,42 @@ export default function TaskMapGraphView({
 
         new Notice("New task has been created!");
 
-        const sourceTask = tasks.find((t) => t.id === sourceNodeId);
-        if (sourceTask) {
-          const newEdgeParams = {
-            source: sourceNodeId,
-            target: newTask.id,
-            sourceHandle: sourceHandleId,
-            targetHandle: isVertical ? "top" : "left", // 假设 TaskNode 的 handle ID 是 'top' 或 'left'
-          };
-          await onConnect(newEdgeParams);
-        }
+		  // 根据 handleType 确定 onConnect 的参数
+		  let actualEdgeSourceId: string;
+		  let actualEdgeTargetId: string;
+		  let actualSourceHandleForEdge: string | null;
+		  let actualTargetHandleForEdge: string | null;
+
+		  // 假设 TaskNode 的 handle ID 遵循 "top", "bottom", "left", "right" 约定
+		  const newNodesTargetHandleId = isVertical ? "top" : "left";
+		  const newNodesSourceHandleId = isVertical ? "bottom" : "right";
+
+		  if (sourceHandleType === 'source') {
+			  // 链接方向: sourceNodeId -> newTask
+			  actualEdgeSourceId = sourceNodeId;
+			  actualEdgeTargetId = newTask.id;
+			  actualSourceHandleForEdge = sourceHandleId; // 原始节点的 source handle
+			  actualTargetHandleForEdge = newNodesTargetHandleId; // 新节点的 target handle
+		  } else if (sourceHandleType === 'target') {
+			  // 链接方向: newTask -> sourceNodeId
+			  actualEdgeSourceId = newTask.id;
+			  actualEdgeTargetId = sourceNodeId;
+			  actualSourceHandleForEdge = newNodesSourceHandleId; // 新节点的 source handle
+			  actualTargetHandleForEdge = sourceHandleId; // 原始节点的 target handle
+		  } else {
+			  // 这种情况应该在前面处理过，但为了安全再次检查
+			  new Notice("Unknown handle type. Cannot create edge.");
+			  connectionStartHandleRef.current = null;
+			  return;
+		  }
+
+		  const newEdgeParams = {
+			  source: actualEdgeSourceId,
+			  target: actualEdgeTargetId,
+			  sourceHandle: actualSourceHandleForEdge,
+			  targetHandle: actualTargetHandleForEdge,
+		  };
+		  await onConnect(newEdgeParams);
       }
       connectionStartHandleRef.current = null;
     },
