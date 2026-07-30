@@ -424,11 +424,35 @@ If your plugin does not need CSS, delete this file.
 }
 
 .tasks-map-tag.tasks-map-tag--removable {
+  position: relative;
+  padding-right: 16px;
+  padding-left: 16px;
   cursor: pointer;
 }
 
+.tasks-map-tag-label {
+  transition: transform 0.15s ease;
+}
+
 .tasks-map-tag-remove-icon {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: block;
   color: white;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition: opacity 0.15s ease;
+}
+
+.tasks-map-tag.tasks-map-tag--removable:hover .tasks-map-tag-label {
+  transform: translateX(-8px);
+}
+
+.tasks-map-tag.tasks-map-tag--removable:hover .tasks-map-tag-remove-icon {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .tasks-map-tag-input {
